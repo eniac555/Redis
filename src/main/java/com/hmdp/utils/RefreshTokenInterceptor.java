@@ -22,7 +22,8 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response,
+                             Object handler) throws Exception {
         //todo 1.获取请求头中的token
         String token = request.getHeader("authorization");
         //todo 2.基于token获取redis中的用户
@@ -31,7 +32,8 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
             //response.setStatus(401);
             return true;
         }
-        Map<Object, Object> userMap = stringRedisTemplate.opsForHash().entries(RedisConstants.LOGIN_USER_KEY+token);
+        Map<Object, Object> userMap = stringRedisTemplate.opsForHash()
+                .entries(RedisConstants.LOGIN_USER_KEY+token);
         //3.判断map是否为空
         if (userMap.isEmpty()) {
             //4.不存在，也不进行拦截，进入到下一个拦截器
@@ -44,13 +46,14 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
         UserHolder.saveUser(userDTO);
         //todo 7.刷新token有效期
         stringRedisTemplate.expire(RedisConstants.LOGIN_USER_KEY+token,
-                RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);//30 minutes
+                30L, TimeUnit.MINUTES);//30 minutes
         //todo 8.放行
         return true;
     }
 
     @Override
-    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
+                                Object handler, Exception ex) throws Exception {
         //移除用户
         UserHolder.removeUser();
 

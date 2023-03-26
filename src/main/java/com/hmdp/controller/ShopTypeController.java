@@ -25,6 +25,7 @@ public class ShopTypeController {
     @Resource
     private IShopTypeService typeService;
 
+    //todo 利用redis缓存店铺类型
     @GetMapping("list")
     public Result queryTypeList() {
         List<ShopType> typeList = typeService
