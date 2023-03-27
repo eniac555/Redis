@@ -27,13 +27,13 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
         //todo 1.获取请求头中的token
         String token = request.getHeader("authorization");
         //todo 2.基于token获取redis中的用户
-        if(StrUtil.isBlank(token)){//判断token是否存在
+        if (StrUtil.isBlank(token)) {//判断token是否存在
             //不存在，也不进行拦截，进入到下一个拦截器
             //response.setStatus(401);
             return true;
         }
         Map<Object, Object> userMap = stringRedisTemplate.opsForHash()
-                .entries(RedisConstants.LOGIN_USER_KEY+token);
+                .entries(RedisConstants.LOGIN_USER_KEY + token);
         //3.判断map是否为空
         if (userMap.isEmpty()) {
             //4.不存在，也不进行拦截，进入到下一个拦截器
@@ -45,7 +45,7 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
         //todo 6.存在，保存用户信息到 ThreadLocal
         UserHolder.saveUser(userDTO);
         //todo 7.刷新token有效期
-        stringRedisTemplate.expire(RedisConstants.LOGIN_USER_KEY+token,
+        stringRedisTemplate.expire(RedisConstants.LOGIN_USER_KEY + token,
                 30L, TimeUnit.MINUTES);//30 minutes
         //todo 8.放行
         return true;
