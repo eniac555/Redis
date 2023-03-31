@@ -19,4 +19,6 @@ public interface IShopService extends IService<Shop> {
 
     //设置店铺缓存的redis更新
     Result update(Shop shop);
+
+    //Result queryShopByType(Integer typeId, Integer current, Double x, Double y);
 }

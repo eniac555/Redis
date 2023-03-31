@@ -63,12 +63,27 @@ public class ShopController {
         return shopService.update(shop);
     }
 
+
+
     /**
      * 根据商铺类型分页查询商铺信息
      * @param typeId 商铺类型
      * @param current 页码
      * @return 商铺列表
      */
+
+//    @GetMapping("/of/type")
+//    public Result queryShopByType(
+//            @RequestParam("typeId") Integer typeId,
+//            @RequestParam(value = "current", defaultValue = "1") Integer current,
+//            @RequestParam(value = "x",required = false) Double x,
+//            @RequestParam(value = "y",required = false) Double y
+//    ) {
+//        //required = false，表示这个是可选参数
+//        return shopService.queryShopByType(typeId,current,x,y);
+//
+//    }
+
     @GetMapping("/of/type")
     public Result queryShopByType(
             @RequestParam("typeId") Integer typeId,
@@ -81,6 +96,8 @@ public class ShopController {
         // 返回数据
         return Result.ok(page.getRecords());
     }
+
+
 
     /**
      * 根据商铺名称关键字分页查询商铺信息
