@@ -20,7 +20,7 @@ import org.springframework.data.geo.GeoResult;
 import org.springframework.data.geo.GeoResults;
 import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.domain.geo.GeoReference;
+//import org.springframework.data.redis.domain.geo.GeoReference;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -269,9 +269,9 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     }
 
 
-    //geo部分的代码   取消掉不做了
+    //geo部分的代码   取消掉不做了  需要redis 6及以上，我装的5
     //@Override
-    public Result queryShopByType(Integer typeId, Integer current, Double x, Double y) {
+   /* public Result queryShopByType(Integer typeId, Integer current, Double x, Double y) {
         //1.判断是否需要根据坐标查询
         if (x == null || y == null) {
             //不需要坐标，按数据库查询
@@ -321,6 +321,6 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         }
         //6.返回
         return Result.ok(shops);
-    }
+    }*/
 
 }
