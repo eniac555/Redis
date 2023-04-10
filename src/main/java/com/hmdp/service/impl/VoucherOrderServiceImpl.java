@@ -72,6 +72,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     //创建线程用来执行后续的下单任务
     private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
 
+
+    private BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024*1024);
+
     @PostConstruct//在当前类--VoucherOrderHandler--初始化完毕后立即执行
     private void init() {
         SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
@@ -340,6 +343,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         voucherOrder.setUserId(userId);
         //2.5代金券id
         voucherOrder.setVoucherId(voucherId);
+
+        // TODO:从这里开始使用rabbitMQ进行操作
+
         //2.6创建阻塞队列
         orderTasks.add(voucherOrder);
         //3.获取代理对象（和事务有关）
