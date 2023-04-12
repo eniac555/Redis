@@ -1,5 +1,6 @@
 server:
   port: 8081
+
 spring:
   application:
     name: hmdp
@@ -19,8 +20,17 @@ spring:
         time-between-eviction-runs: 10s
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
+  rabbitmq:
+    host: 192.168.163.128
+    port: 5672
+    username: admin
+    password: 123
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
 mybatis-plus:
   type-aliases-package: com.hmdp.entity # 扫描包
+
 logging:
   level:
     com.hmdp: debug
