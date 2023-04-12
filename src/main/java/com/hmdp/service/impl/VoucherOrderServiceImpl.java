@@ -1,6 +1,7 @@
 package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.SeckillVoucher;
@@ -15,6 +16,7 @@ import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.connection.stream.*;
@@ -58,6 +60,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @Resource
     private RedissonClient redissonClient;
+
+    @Resource
+    private RabbitTemplate rabbitTemplate;
 
     //加载lua脚本
     private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
@@ -354,6 +359,48 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //3.返回订单id
         return Result.ok(orderId);
     }*/
+
+
+    @Override
+    public Result seckillVoucher2(Long voucherId) {
+        //获取用户
+        Long userId = UserHolder.getUser().getId();
+
+        //1.执行lua脚本
+        Long result = stringRedisTemplate.execute(SECKILL_SCRIPT,
+                Collections.emptyList(),
+                voucherId.toString(), userId.toString());
+
+        //2.判断结果为0
+        int r = result.intValue();
+        if (r != 0) {
+            //2.1 判断结果不为0，没有资格
+            return Result.fail(r == 1 ? "库存不足" : "不能重复下单");
+        }
+        //2.2 判断结果为0，有资格，保存下单信息到阻塞队列
+
+        //创建订单
+        VoucherOrder voucherOrder = new VoucherOrder();
+        //2.3订单id
+        long orderId = redisIdWorker.nextId("order");
+        voucherOrder.setId(orderId);
+        //2.4用户id
+        voucherOrder.setUserId(userId);
+        //2.5代金券id
+        voucherOrder.setVoucherId(voucherId);
+
+        // TODO:从这里开始使用rabbitMQ进行操作
+        //相当于生产者，发送消息的地方
+
+        //放入mq
+        String jsonStr = JSONUtil.toJsonStr(voucherOrder);
+        rabbitTemplate.convertAndSend("normal_exchange",
+                "normal_exchange_to_normal_queue", jsonStr );
+
+        //3.返回订单id
+        return Result.ok(orderId);
+    }
+
 
     //判断是否一人一单并创建订单
     @Transactional//有订单表和优惠券表的共同操作，最好加上事务控制

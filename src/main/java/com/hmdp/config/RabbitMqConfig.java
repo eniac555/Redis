@@ -37,7 +37,7 @@ public class RabbitMqConfig {
         return new DirectExchange(DEAD_EXCHANGE_NAME);
     }
 
-    //声明普通队列，
+    //声明普通队列（死信交换机同时绑定了死信队列）
     @Bean("queueA")
     public Queue queueA() {
         Map<String, Object> arguments = new HashMap<>(3);
@@ -46,6 +46,8 @@ public class RabbitMqConfig {
         //设置死信交换机，消息成为死信之后转发到对应的死信交换机
         arguments.put("x-dead-letter-exchange", DEAD_EXCHANGE_NAME);//DLX:表示是死信交换机
         //设置死信routingKey，死信交换机发送消息到死信队列
+        //没有死信交换机，也就没有所谓的死信队列，两者还要通过路由键绑定在一起。
+        //=======这一步必不可少=======
         arguments.put("x-dead-letter-routing-key", "dead_exchange_to_dead_queue");//DLK：表示设置了死信路由key
         return QueueBuilder.durable(NORMAL_QUEUE_NAME).withArguments(arguments).build();
     }

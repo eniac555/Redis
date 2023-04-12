@@ -17,6 +17,9 @@ public interface IVoucherOrderService extends IService<VoucherOrder> {
     //秒杀优惠券
     Result seckillVoucher(Long voucherId);
 
+    //秒杀优惠券，使用rabbit消息队列
+    Result seckillVoucher2(Long voucherId);
+
     //原始版本的创建订单
     Result createVoucherOrder(Long voucherId);
 
