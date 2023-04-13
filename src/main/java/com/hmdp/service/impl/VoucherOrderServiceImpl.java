@@ -13,9 +13,12 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.core.io.ClassPathResource;
@@ -78,7 +81,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
 
 
-    private BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024*1024);
+    //private BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024*1024);
 
     @PostConstruct//在当前类--VoucherOrderHandler--初始化完毕后立即执行
     private void init() {
@@ -163,6 +166,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
     }
 
+
   /*  //创建阻塞队列
     private BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024 * 1024);
 
@@ -185,7 +189,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     }*/
 
 
-    //异步执行订单确认的操作，前面只是预先存入订单信息，这里是订单处理
+    //异步执行订单确认的操作，前面只是预先存入订单信息，这里是订单处理，redis消息队列版本
     private void handleVoucherOrder(VoucherOrder voucherOrder) {
         //1.获取用户id
         Long userId = voucherOrder.getUserId();
@@ -209,7 +213,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     //秒杀优惠券 ----基础版
 
-/*    @Override
+    /*@Override
     public Result seckillVoucher(Long voucherId) {
         //1.查询优惠券信息
         SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
@@ -242,7 +246,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
 
     //秒杀优惠券 ----分布式锁--基础版的分布式锁
-/*    @Override
+    /*@Override
     public Result seckillVoucher(Long voucherId) {
         //1.查询优惠券信息
         SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
@@ -292,7 +296,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     private IVoucherOrderService proxy;
 
+
     //消息队列--stream
+    //异步秒杀，判断有没有购买资格
     @Override
     public Result seckillVoucher(Long voucherId) {
         //获取用户
@@ -321,7 +327,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
 
     //秒杀优惠券---lua脚本改进版+阻塞队列优化
-/*    @Override
+    /*@Override
     public Result seckillVoucher(Long voucherId) {
         //获取用户
         Long userId = UserHolder.getUser().getId();
@@ -361,51 +367,11 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     }*/
 
 
-    @Override
-    public Result seckillVoucher2(Long voucherId) {
-        //获取用户
-        Long userId = UserHolder.getUser().getId();
 
-        //1.执行lua脚本
-        Long result = stringRedisTemplate.execute(SECKILL_SCRIPT,
-                Collections.emptyList(),
-                voucherId.toString(), userId.toString());
-
-        //2.判断结果为0
-        int r = result.intValue();
-        if (r != 0) {
-            //2.1 判断结果不为0，没有资格
-            return Result.fail(r == 1 ? "库存不足" : "不能重复下单");
-        }
-        //2.2 判断结果为0，有资格，保存下单信息到阻塞队列
-
-        //创建订单
-        VoucherOrder voucherOrder = new VoucherOrder();
-        //2.3订单id
-        long orderId = redisIdWorker.nextId("order");
-        voucherOrder.setId(orderId);
-        //2.4用户id
-        voucherOrder.setUserId(userId);
-        //2.5代金券id
-        voucherOrder.setVoucherId(voucherId);
-
-        // TODO:从这里开始使用rabbitMQ进行操作
-        //相当于生产者，发送消息的地方
-
-        //放入mq
-        String jsonStr = JSONUtil.toJsonStr(voucherOrder);
-        rabbitTemplate.convertAndSend("normal_exchange",
-                "normal_exchange_to_normal_queue", jsonStr );
-
-        //3.返回订单id
-        return Result.ok(orderId);
-    }
-
-
-    //判断是否一人一单并创建订单
+    //判断是否一人一单并创建订单，分布式锁版本
     @Transactional//有订单表和优惠券表的共同操作，最好加上事务控制
     public Result createVoucherOrder(Long voucherId) {
-        //5.一人一单判断
+        /*//5.一人一单判断
         Long userId = UserHolder.getUser().getId();
         //5.1查询订单
         int count = query().eq("user_id", userId)
@@ -436,7 +402,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //写入数据库
         save(voucherOrder);
         //8.返回订单id
-        return Result.ok(orderId);
+        return Result.ok(orderId);*/
+
+        return Result.ok();
     }
 
 
@@ -465,4 +433,167 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //7.创建订单
         save(voucherOrder);
     }
+
+
+    /**
+     * 注意:
+     * 使用rabbit消息队列时要把seckill.lua文件的第33行注释掉，
+     * <p>
+     * 上面其他方法可以全部不用考虑，只依靠下面三个函数，
+     * <p>
+     * 当然可以把消费者添加订单的操作单独拿出来放进一个锁里，消费者直接调用这个加锁的函数
+     * <p>
+     *  加锁运行就是需要五个函数
+     */
+
+    //rabbit消息队列实现异步的订单处理操作
+    @Override
+    public Result seckillVoucher2(Long voucherId) {
+        //获取用户
+        Long userId = UserHolder.getUser().getId();
+
+        //1.执行lua脚本
+        Long result = stringRedisTemplate.execute(SECKILL_SCRIPT,
+                Collections.emptyList(),
+                voucherId.toString(), userId.toString());
+
+        //2.判断结果为0
+        int r = result.intValue();
+        if (r != 0) {
+            //2.1 判断结果不为0，没有资格
+            return Result.fail(r == 1 ? "库存不足" : "不能重复下单");
+        }
+        //2.2 判断结果为0，有资格，保存下单信息到阻塞队列
+
+        //创建订单
+        VoucherOrder voucherOrder = new VoucherOrder();
+        //2.3订单id
+        long orderId = redisIdWorker.nextId("order");
+        voucherOrder.setId(orderId);
+        //2.4用户id
+        voucherOrder.setUserId(userId);
+        //2.5代金券id
+        voucherOrder.setVoucherId(voucherId);
+
+        // TODO:从这里开始使用rabbitMQ进行操作，这里把消息放进队列，起到生产者作用
+        //相当于生产者，发送消息的地方
+
+        //放入mq
+        //rabbitMQ中发送和接收的都是字符串/字节数组类型的消息, 所以我们要把java对象转成json串进行发送
+        String jsonStr = JSONUtil.toJsonStr(voucherOrder);
+        rabbitTemplate.convertAndSend("normal_exchange",
+                "normal_exchange_to_normal_queue", jsonStr);
+
+
+        //proxy = (IVoucherOrderService) AopContext.currentProxy();
+
+        //3.返回订单id
+        return Result.ok(orderId);
+    }
+
+
+    /**
+     * 正常的消费者
+     * @param message
+     */
+    @RabbitListener(queues = "normal_queue")
+    public void receiveNormal(Message message, Channel channel){
+        //获取队列中的消息
+        String msg = new String(message.getBody());
+        //把消息转成对用的类对象
+        VoucherOrder voucherOrder = JSONUtil.toBean(msg, VoucherOrder.class);
+
+        //加锁运行
+        //handleVoucherOrder(voucherOrder);
+
+        //扣减库存
+        Long voucherId = voucherOrder.getVoucherId();
+        log.info(voucherOrder.toString());
+        seckillVoucherService.update()
+                .setSql("stock = stock - 1")
+                .eq("voucher_id", voucherId)
+                .gt("stock", 0)
+                .update();
+        //保存订单
+        save(voucherOrder);
+    }
+
+
+    /**
+     * 消费死信的队列
+     * @param message
+     */
+    @RabbitListener(queues = "dead_queue")
+    public void receiveDead(Message message) {
+        //获取队列中的消息
+        String msg = new String(message.getBody());
+        //把消息转成对用的类对象
+        VoucherOrder voucherOrder = JSONUtil.toBean(msg, VoucherOrder.class);
+        log.info(voucherOrder.toString());
+
+        //加锁运行
+        //handleVoucherOrder(voucherOrder);
+
+        //扣减库存
+        Long voucherId = voucherOrder.getVoucherId();
+        seckillVoucherService.update()
+                .setSql("stock = stock - 1")
+                .eq("voucher_id", voucherId)
+                .gt("stock", 0)
+                .update();
+        //保存订单
+        save(voucherOrder);
+    }
+
+
+    //异步执行订单确认的操作，前面只是预先存入订单信息，这里是订单处理，redis消息队列版本
+   /* private void handleVoucherOrder(VoucherOrder voucherOrder) {
+        //1.获取用户id
+        Long userId = voucherOrder.getUserId();
+        //2.创建锁对象
+        RLock lock = redissonClient.getLock("lock:order:" + userId);
+        //3.获取锁
+        boolean isLock = lock.tryLock();
+        //4.判断获取锁是否 成功
+        if (!isLock) {
+            //不成功
+            log.error("不允许重复下单");
+        }
+        //获取锁成功
+        try {
+            createVoucherOrder2(voucherOrder);
+        } finally {
+            //lock.unLock();
+            lock.unlock();
+        }
+    }*/
+
+
+
+    //阻塞队列后续处理过程用的函数方法
+   /* @Transactional//有订单表和优惠券表的共同操作，最好加上事务控制
+    public void createVoucherOrder2(VoucherOrder voucherOrder) {
+        //5.一人一单判断
+        Long userId = voucherOrder.getId();
+        //5.1查询订单
+        int count = query().eq("user_id", userId)
+                .eq("voucher_id", voucherOrder.getVoucherId()).count();
+        //5.2判断是否存在
+        if (count > 0) {
+            //用户已经购买过
+            log.error("已经购买过");
+        }
+        //6.扣减库存++++乐观锁---CAS
+        boolean success = seckillVoucherService.update()
+                .setSql("stock = stock - 1")//sql语句  set stock = stock - 1
+                .eq("voucher_id", voucherOrder.getVoucherId()).gt("stock", 0)
+                //where条件  id = ? and stock = ?
+                .update();
+        if (!success) {
+            log.error("库存不足");
+        }
+        //7.创建订单
+        save(voucherOrder);
+    }*/
+
 }
